@@ -1,0 +1,14 @@
+substitutions:
+  _REGION: us
+  _AR_REPO: egdc
+  _IMAGE: web
+  _TAG: $SHORT_SHA
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build','-t','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','.']
+  - name: gcr.io/cloud-builders/docker
+    args: ['push','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
+
+images:
+  - 'us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
