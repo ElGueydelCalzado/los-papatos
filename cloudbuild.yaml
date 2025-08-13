@@ -1,14 +1,54 @@
 substitutions:
-  _REGION: us
-  _AR_REPO: egdc
+  _REGION: us-central1
+  _AR_REPO: los-papatos
   _IMAGE: web
   _TAG: $SHORT_SHA
+  _STG_SERVICE: los-papatos-web-stg
+  _PRD_SERVICE: los-papatos-web
 
 steps:
+  # Build image
   - name: gcr.io/cloud-builders/docker
     args: ['build','-t','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','.']
+
+  # Generate SBOM (SPDX JSON)
+  - name: ghcr.io/anchore/syft:latest
+    entrypoint: syft
+    args: ['packages','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','-o','spdx-json','-q']
+    id: sbom
+
+  # Push image
   - name: gcr.io/cloud-builders/docker
     args: ['push','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
+
+  # Trivy image scan (fail on HIGH/CRITICAL)
+  - name: aquasec/trivy:latest
+    entrypoint: trivy
+    args: ['image','--severity','HIGH,CRITICAL','--exit-code','1','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
+
+  # Deploy to staging Cloud Run (0% traffic for verification)
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run deploy ${_STG_SERVICE} \
+          --image us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG} \
+          --region ${_REGION} \
+          --allow-unauthenticated \
+          --set-env-vars NEXTAUTH_URL=https://stg.app.lospapatos.com
+
+  # Optional: promote to production with manual approval in trigger
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run deploy ${_PRD_SERVICE} \
+          --image us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG} \
+          --region ${_REGION} \
+          --no-allow-unauthenticated \
+          --set-env-vars NEXTAUTH_URL=https://app.lospapatos.com
 
 images:
   - 'us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
