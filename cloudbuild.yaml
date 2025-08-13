@@ -1,5 +1,5 @@
 substitutions:
-  _REGION: us-central1
+  _REGION: us-east1
   _AR_REPO: los-papatos
   _IMAGE: web
   _TAG: $SHORT_SHA
@@ -13,22 +13,22 @@ options:
 steps:
   # Build image
   - name: gcr.io/cloud-builders/docker
-    args: ['build','-t','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','.']
+    args: ['build','-t','us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','.']
 
   # Generate SBOM (SPDX JSON)
   - name: ghcr.io/anchore/syft:latest
     entrypoint: syft
-    args: ['packages','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','-o','spdx-json','-q']
+    args: ['packages','us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','-o','spdx-json','-q']
     id: sbom
 
   # Push image
   - name: gcr.io/cloud-builders/docker
-    args: ['push','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
+    args: ['push','us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
 
   # Trivy image scan (fail on HIGH/CRITICAL)
   - name: aquasec/trivy:latest
     entrypoint: trivy
-    args: ['image','--severity','HIGH,CRITICAL','--exit-code','1','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
+    args: ['image','--severity','HIGH,CRITICAL','--exit-code','1','us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
 
   # Deploy to staging Cloud Run
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
@@ -37,7 +37,7 @@ steps:
       - -c
       - |
         gcloud run deploy ${_STG_SERVICE} \
-          --image us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG} \
+          --image us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG} \
           --region ${_REGION} \
           --allow-unauthenticated \
           --platform managed \
@@ -49,4 +49,4 @@ steps:
           --set-env-vars "NEXTAUTH_URL=https://${_STG_SERVICE}-$(gcloud config get-value project).a.run.app,NODE_ENV=production"
 
 images:
-  - 'us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
+  - 'us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
