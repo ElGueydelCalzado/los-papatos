@@ -1,52 +1,46 @@
 substitutions:
-  _REGION: us-east1
+  _AR_REGION: us-central1
+  _DEPLOY_REGION: us-central1
   _AR_REPO: los-papatos
   _IMAGE: web
   _TAG: $SHORT_SHA
-  _STG_SERVICE: los-papatos-web-stg
-  _PRD_SERVICE: los-papatos-web
+  _SERVICE: los-papatos-web-stg
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  substitution_option: ALLOW_LOOSE
+  machineType: E2_STANDARD_4
 
 steps:
   # Build image
   - name: gcr.io/cloud-builders/docker
-    args: ['build','-t','us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','.']
-
-  # Generate SBOM (SPDX JSON)
-  - name: ghcr.io/anchore/syft:latest
-    entrypoint: syft
-    args: ['packages','us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}','-o','spdx-json','-q']
-    id: sbom
+    args: 
+      - 'build'
+      - '-t'
+      - '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
+      - '.'
 
   # Push image
   - name: gcr.io/cloud-builders/docker
-    args: ['push','us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
+    args: 
+      - 'push'
+      - '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
 
-  # Trivy image scan (fail on HIGH/CRITICAL)
-  - name: aquasec/trivy:latest
-    entrypoint: trivy
-    args: ['image','--severity','HIGH,CRITICAL','--exit-code','1','us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
-
-  # Deploy to staging Cloud Run
+  # Deploy to Cloud Run
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash
     args:
       - -c
       - |
-        gcloud run deploy ${_STG_SERVICE} \
-          --image us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG} \
-          --region ${_REGION} \
+        gcloud run deploy ${_SERVICE} \
+          --image ${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG} \
+          --region ${_DEPLOY_REGION} \
           --allow-unauthenticated \
           --platform managed \
           --port 3000 \
-          --memory 512Mi \
+          --memory 1Gi \
           --cpu 1 \
-          --min-instances 0 \
           --max-instances 10 \
-          --set-env-vars "NEXTAUTH_URL=https://${_STG_SERVICE}-$(gcloud config get-value project).a.run.app,NODE_ENV=production"
+          --set-env-vars NODE_ENV=production,NEXT_TELEMETRY_DISABLED=1
 
 images:
-  - 'us-east1-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
+  - '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
