@@ -6,6 +6,10 @@ substitutions:
   _STG_SERVICE: los-papatos-web-stg
   _PRD_SERVICE: los-papatos-web
 
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitution_option: ALLOW_LOOSE
+
 steps:
   # Build image
   - name: gcr.io/cloud-builders/docker
@@ -26,7 +30,7 @@ steps:
     entrypoint: trivy
     args: ['image','--severity','HIGH,CRITICAL','--exit-code','1','us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}']
 
-  # Deploy to staging Cloud Run (0% traffic for verification)
+  # Deploy to staging Cloud Run
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash
     args:
@@ -36,19 +40,13 @@ steps:
           --image us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG} \
           --region ${_REGION} \
           --allow-unauthenticated \
-          --set-env-vars NEXTAUTH_URL=https://stg.app.lospapatos.com
-
-  # Optional: promote to production with manual approval in trigger
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    entrypoint: bash
-    args:
-      - -c
-      - |
-        gcloud run deploy ${_PRD_SERVICE} \
-          --image us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG} \
-          --region ${_REGION} \
-          --no-allow-unauthenticated \
-          --set-env-vars NEXTAUTH_URL=https://app.lospapatos.com
+          --platform managed \
+          --port 3000 \
+          --memory 512Mi \
+          --cpu 1 \
+          --min-instances 0 \
+          --max-instances 10 \
+          --set-env-vars "NEXTAUTH_URL=https://${_STG_SERVICE}-$(gcloud config get-value project).a.run.app,NODE_ENV=production"
 
 images:
   - 'us-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE}:${_TAG}'
